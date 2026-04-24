@@ -101,8 +101,15 @@ def export_pdf(content: str, topic: str, output_dir: Path) -> Path:
     pdf.cell(0, 10, topic[:80], ln=True)        # Write the topic as the title (max 80 chars)
     pdf.set_font("Helvetica", size=11)          # Switch to regular 11pt font for body text
     for line in content.splitlines():
-        # Write each line; use multi_cell to handle long lines with word wrap
-        pdf.multi_cell(0, 8, line[:200] if line.strip() else "")
+        # Reset x/y after each line so width=0 remains the full printable width in fpdf2.
+        pdf.multi_cell(
+            0,
+            8,
+            line[:200] if line.strip() else "",
+            wrapmode="CHAR",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
     path = output_dir / f"{topic[:40].replace(' ', '_')}.pdf"
     pdf.output(str(path))  # Save the PDF to disk (fpdf2 requires a string path)
     return path            # Return the saved file path
