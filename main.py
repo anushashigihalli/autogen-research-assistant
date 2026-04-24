@@ -130,7 +130,14 @@ async def main():
 
     # Read export format preferences; default to pptx and md if nothing is entered
     fmt_input = input("Export formats (comma-separated: pptx,md,docx,pdf) [default: pptx,md]: ").strip()
-    formats = [f.strip() for f in fmt_input.split(",")] if fmt_input else ["pptx", "md"]
+    allowed_formats = {"pptx", "md", "docx", "pdf"}
+    if fmt_input:
+        formats = [f.strip().lower() for f in fmt_input.split(",") if f.strip()]
+        formats = [f for f in formats if f in allowed_formats]
+        if not formats:
+            formats = ["pptx", "md"]
+    else:
+        formats = ["pptx", "md"]
 
     await run_pipeline(topic, formats)  # Run the full pipeline with the given inputs
 
