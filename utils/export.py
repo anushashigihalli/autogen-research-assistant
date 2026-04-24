@@ -2,6 +2,14 @@ from pathlib import Path  # Cross-platform file path handling
 from pptx import Presentation  # python-pptx library for creating PowerPoint files
 from pptx.util import Inches, Pt  # Utility classes for slide dimensions and font sizes
 import re  # Regular expressions for parsing slide headings from text
+import unicodedata  # Normalize text for PDF-safe output
+
+
+def _safe_filename_part(value: str) -> str:
+    # Keep exported filenames portable across Windows by stripping unsupported characters.
+    value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    value = re.sub(r"[^A-Za-z0-9_-]+", "_", value)
+    return value.strip("._-") or "output"
 
 
 def _parse_ppt_outline(text: str) -> list[dict]:
@@ -67,14 +75,14 @@ def export_ppt(writer_text: str, topic: str, output_dir: Path) -> Path:
                 p.level = 0                                   # Set bullet indent level to 0 (top level)
 
     # Build the output file path using the topic name (spaces replaced with underscores)
-    path = output_dir / f"{topic[:40].replace(' ', '_')}.pptx"
+    path = output_dir / f"{_safe_filename_part(topic[:40])}.pptx"
     prs.save(path)  # Save the presentation to disk
     return path     # Return the saved file path
 
 
 def export_markdown(content: str, topic: str, output_dir: Path) -> Path:
     # Exports the reviewed report as a Markdown (.md) file
-    path = output_dir / f"{topic[:40].replace(' ', '_')}.md"
+    path = output_dir / f"{_safe_filename_part(topic[:40])}.md"
     path.write_text(f"# {topic}\n\n{content}", encoding="utf-8")  # Add topic as H1 heading
     return path  # Return the saved file path
 
@@ -87,7 +95,7 @@ def export_docx(content: str, topic: str, output_dir: Path) -> Path:
     for para in content.split("\n\n"):  # Split content into paragraphs by double newline
         if para.strip():
             doc.add_paragraph(para.strip())  # Add each non-empty paragraph to the document
-    path = output_dir / f"{topic[:40].replace(' ', '_')}.docx"
+    path = output_dir / f"{_safe_filename_part(topic[:40])}.docx"
     doc.save(path)  # Save the Word document to disk
     return path     # Return the saved file path
 
@@ -95,22 +103,38 @@ def export_docx(content: str, topic: str, output_dir: Path) -> Path:
 def export_pdf(content: str, topic: str, output_dir: Path) -> Path:
     # Exports the reviewed report as a PDF file using fpdf2
     from fpdf import FPDF  # Import here to avoid loading if pdf export is not requested
+
+    def _pdf_safe_text(text: str) -> str:
+        # Map common punctuation to ASCII before dropping unsupported characters.
+        replacements = {
+            "—": "-",
+            "–": "-",
+            "‘": "'",
+            "’": "'",
+            "“": '"',
+            "”": '"',
+            "…": "...",
+        }
+        for source, target in replacements.items():
+            text = text.replace(source, target)
+        return unicodedata.normalize("NFKD", text).encode("latin-1", "ignore").decode("latin-1")
+
     pdf = FPDF()             # Create a new blank PDF document
     pdf.add_page()           # Add the first page
     pdf.set_font("Helvetica", "B", 16)          # Set bold 16pt font for the title
-    pdf.cell(0, 10, topic[:80], ln=True)        # Write the topic as the title (max 80 chars)
+    pdf.cell(0, 10, _pdf_safe_text(topic[:80]), ln=True)        # Write the topic as the title (max 80 chars)
     pdf.set_font("Helvetica", size=11)          # Switch to regular 11pt font for body text
     for line in content.splitlines():
         # Reset x/y after each line so width=0 remains the full printable width in fpdf2.
         pdf.multi_cell(
             0,
             8,
-            line[:200] if line.strip() else "",
+            _pdf_safe_text(line[:200]) if line.strip() else "",
             wrapmode="CHAR",
             new_x="LMARGIN",
             new_y="NEXT",
         )
-    path = output_dir / f"{topic[:40].replace(' ', '_')}.pdf"
+    path = output_dir / f"{_safe_filename_part(topic[:40])}.pdf"
     pdf.output(str(path))  # Save the PDF to disk (fpdf2 requires a string path)
     return path            # Return the saved file path
 
